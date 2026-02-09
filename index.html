@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>廣東話S音練習</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .success-bg { background-color: #f0fdf4 !important; }
+        .mic-active { animation: pulse 0.8s infinite alternate; background-color: #ef4444 !important; }
+        @keyframes pulse {
+            from { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+            to { transform: scale(1.05); box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+        }
+    </style>
+</head>
+<body class="bg-sky-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const GAME_LEVELS = [
+            { target: "鼠", fuzzy: ["鼠", "老鼠", "處", "五", "書", "數"], jp: "syu2", img: "🐭" },
+            { target: "沙", fuzzy: ["沙", "山", "三", "莎", "下", "加", "沙灘", "少"], jp: "saa1", img: "🏖️" },
+            { target: "水", fuzzy: ["水", "水果", "稅", "碎"], jp: "seoi2", img: "💧" },
+            { target: "石", fuzzy: ["石", "石頭", "席", "射"], jp: "sek6", img: "🪨" },
+            { target: "手", fuzzy: ["手", "手錶", "首", "受"], jp: "sau2", img: "✋" }
+        ];
+
+        function App() {
+            const [idx, setIdx] = useState(0);
+            const [isListening, setIsListening] = useState(false);
+            const [heard, setHeard] = useState("");
+            const [isSuccess, setIsSuccess] = useState(false);
+            
+            const recognitionRef = useRef(null);
+            const activeRef = useRef(false);
+
+            const speak = (text) => {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'zh-HK';
+                u.rate = 0.9;
+                window.speechSynthesis.speak(u);
+            };
+
+            const startRecognition = () => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) return;
+
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'zh-HK';
+                recognition.interimResults = true;
+                recognition.continuous = false; 
+
+                recognition.onstart = () => setIsListening(true);
+
+                recognition.onresult = (event) => {
+                    let transcript = "";
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        transcript += event.results[i][0].transcript;
+                    }
+                    
+                    // 只要有字就顯示，增加反饋感
+                    if (transcript) setHeard(transcript);
+
+                    const level = GAME_LEVELS[idx];
+                    // 核心判定
+                    const matched = level.fuzzy.some(f => transcript.includes(f));
+                    
+                    if (matched) {
+                        activeRef.current = false;
+                        handleCorrect();
+                        try { recognition.stop(); } catch(e) {}
+                    }
+                };
+
+                recognition.onend = () => {
+                    // 只要用戶沒點停止且沒成功，強制無縫重啟
+                    if (activeRef.current && !isSuccess) {
+                        try { recognition.start(); } catch(e) {}
+                    } else {
+                        setIsListening(false);
+                    }
+                };
+
+                recognitionRef.current = recognition;
+                try { recognition.start(); } catch(e) {}
+            };
+
+            const handleCorrect = () => {
+                setIsSuccess(true);
+                speak("好叻呀");
+                setTimeout(() => {
+                    if (idx < GAME_LEVELS.length - 1) {
+                        setIdx(prev => prev + 1);
+                        setHeard("");
+                        setIsSuccess(false);
+                    } else {
+                        alert("挑戰成功！");
+                        window.location.reload();
+                    }
+                }, 1200);
+            };
+
+            const toggleMic = () => {
+                if (activeRef.current) {
+                    activeRef.current = false;
+                    recognitionRef.current?.stop();
+                } else {
+                    setHeard("");
+                    setIsSuccess(false);
+                    activeRef.current = true;
+                    startRecognition();
+                }
+            };
+
+            const level = GAME_LEVELS[idx];
+
+            return (
+                <div className={`min-h-screen p-6 flex flex-col items-center transition-all ${isSuccess ? 'success-bg' : 'bg-sky-50'}`}>
+                    <div className="w-full max-w-md bg-white p-4 rounded-3xl shadow-sm mb-6 flex justify-between font-bold text-blue-500 border border-blue-50">
+                        <span>第 {idx + 1} 關</span>
+                        <span className="text-yellow-500 text-xl">★ {idx}</span>
+                    </div>
+
+                    <div className="bg-white rounded-[45px] shadow-xl p-8 w-full max-w-md flex flex-col items-center border-b-8 border-gray-100 relative">
+                        <div className="text-[10rem] mb-2 leading-none">{level.img}</div>
+                        <div className="text-8xl font-black text-slate-800 mb-2">{level.target}</div>
+                        <div className="text-slate-400 text-2xl font-mono mb-8 tracking-widest">{level.jp}</div>
+
+                        <button 
+                            onClick={toggleMic}
+                            disabled={isSuccess}
+                            className={`w-full py-8 rounded-[35px] text-3xl font-black transition-all text-white shadow-lg ${isListening ? 'mic-active' : 'bg-blue-600 active:scale-95'}`}
+                        >
+                            {isListening ? "聽緊你講..." : "按此讀音"}
+                        </button>
+
+                        <div className="mt-8 text-center min-h-[100px] w-full flex flex-col justify-center">
+                            {isSuccess ? (
+                                <p className="text-4xl font-black text-green-500 animate-bounce">好叻呀！</p>
+                            ) : (
+                                <div className="bg-slate-50 p-4 rounded-3xl border-2 border-dashed border-slate-200">
+                                    <p className="text-xs font-bold text-slate-400 mb-1">系統聽到：</p>
+                                    <p className="text-3xl font-black text-red-500 leading-tight">
+                                        {heard || (isListening ? "..." : "準備練習")}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="mt-6 flex gap-4">
+                        <button onClick={() => speak(level.target)} className="bg-white border-2 border-blue-100 text-blue-500 px-6 py-3 rounded-2xl font-bold shadow-sm active:bg-blue-50">🔈 聽示範</button>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
