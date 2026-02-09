@@ -11,10 +11,11 @@
     <style>
         body { font-family: system-ui, sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
         .success-bg { background-color: #f0fdf4 !important; }
-        .mic-active { animation: pulse 0.8s infinite alternate; background-color: #ef4444 !important; }
+        .mic-active { animation: pulse 1s infinite; background-color: #ef4444 !important; }
         @keyframes pulse {
-            from { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-            to { transform: scale(1.05); box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.03); box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
     </style>
 </head>
@@ -25,11 +26,11 @@
         const { useState, useEffect, useRef } = React;
 
         const GAME_LEVELS = [
-            { target: "鼠", fuzzy: ["鼠", "老鼠", "處", "五", "書", "數"], jp: "syu2", img: "🐭" },
-            { target: "沙", fuzzy: ["沙", "山", "三", "莎", "下", "加", "沙灘", "少"], jp: "saa1", img: "🏖️" },
-            { target: "水", fuzzy: ["水", "水果", "稅", "碎"], jp: "seoi2", img: "💧" },
-            { target: "石", fuzzy: ["石", "石頭", "席", "射"], jp: "sek6", img: "🪨" },
-            { target: "手", fuzzy: ["手", "手錶", "首", "受"], jp: "sau2", img: "✋" }
+            { target: "鼠", jp: "syu2", img: "🐭", alt: ["老鼠", "暑", "署", "薯"] },
+            { target: "沙", jp: "saa1", img: "🏖️", alt: ["沙灘", "紗", "裟"] },
+            { target: "水", jp: "seoi2", img: "💧", alt: ["水果", "睡"] },
+            { target: "石", jp: "sek6", img: "🪨", alt: ["石頭"] },
+            { target: "手", jp: "sau2", img: "✋", alt: ["手錶"] }
         ];
 
         function App() {
@@ -56,32 +57,30 @@
                 const recognition = new SpeechRecognition();
                 recognition.lang = 'zh-HK';
                 recognition.interimResults = true;
-                recognition.continuous = false; 
+                recognition.continuous = false; // Android 上設為 false 並手動重啟更穩定
 
                 recognition.onstart = () => setIsListening(true);
-
+                
                 recognition.onresult = (event) => {
                     let transcript = "";
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         transcript += event.results[i][0].transcript;
                     }
-                    
-                    // 只要有字就顯示，增加反饋感
-                    if (transcript) setHeard(transcript);
+                    setHeard(transcript);
 
                     const level = GAME_LEVELS[idx];
-                    // 核心判定
-                    const matched = level.fuzzy.some(f => transcript.includes(f));
-                    
+                    const matched = transcript.includes(level.target) || 
+                                  level.alt.some(a => transcript.includes(a));
+
                     if (matched) {
                         activeRef.current = false;
+                        recognition.stop();
                         handleCorrect();
-                        try { recognition.stop(); } catch(e) {}
                     }
                 };
 
                 recognition.onend = () => {
-                    // 只要用戶沒點停止且沒成功，強制無縫重啟
+                    // 「不倒翁」邏輯：只要用戶沒按停止且沒過關，立刻自動重啟
                     if (activeRef.current && !isSuccess) {
                         try { recognition.start(); } catch(e) {}
                     } else {
@@ -105,7 +104,7 @@
                         alert("挑戰成功！");
                         window.location.reload();
                     }
-                }, 1200);
+                }, 1500);
             };
 
             const toggleMic = () => {
@@ -126,39 +125,46 @@
                 <div className={`min-h-screen p-6 flex flex-col items-center transition-all ${isSuccess ? 'success-bg' : 'bg-sky-50'}`}>
                     <div className="w-full max-w-md bg-white p-4 rounded-3xl shadow-sm mb-6 flex justify-between font-bold text-blue-500 border border-blue-50">
                         <span>第 {idx + 1} 關</span>
-                        <span className="text-yellow-500 text-xl">★ {idx}</span>
+                        <span className="text-yellow-500">⭐ {idx}</span>
                     </div>
 
-                    <div className="bg-white rounded-[45px] shadow-xl p-8 w-full max-w-md flex flex-col items-center border-b-8 border-gray-100 relative">
-                        <div className="text-[10rem] mb-2 leading-none">{level.img}</div>
+                    <div className="bg-white rounded-[40px] shadow-xl p-8 w-full max-w-md flex flex-col items-center border-b-8 border-gray-100 relative">
+                        <div className="text-[9rem] mb-2 leading-none">{level.img}</div>
                         <div className="text-8xl font-black text-slate-800 mb-2">{level.target}</div>
                         <div className="text-slate-400 text-2xl font-mono mb-8 tracking-widest">{level.jp}</div>
 
                         <button 
                             onClick={toggleMic}
                             disabled={isSuccess}
-                            className={`w-full py-8 rounded-[35px] text-3xl font-black transition-all text-white shadow-lg ${isListening ? 'mic-active' : 'bg-blue-600 active:scale-95'}`}
+                            className={`w-full py-9 rounded-[30px] text-3xl font-black transition-all text-white shadow-lg ${isListening ? 'mic-active' : 'bg-blue-600 active:scale-95'}`}
                         >
-                            {isListening ? "聽緊你講..." : "按此讀音"}
+                            {isListening ? "聽緊你講..." : "撳我讀音"}
                         </button>
 
-                        <div className="mt-8 text-center min-h-[100px] w-full flex flex-col justify-center">
+                        <div className="mt-8 text-center min-h-[110px] w-full flex flex-col justify-center">
                             {isSuccess ? (
-                                <p className="text-4xl font-black text-green-500 animate-bounce">好叻呀！</p>
+                                <p className="text-4xl font-black text-green-500 animate-bounce">正確！</p>
                             ) : (
-                                <div className="bg-slate-50 p-4 rounded-3xl border-2 border-dashed border-slate-200">
-                                    <p className="text-xs font-bold text-slate-400 mb-1">系統聽到：</p>
-                                    <p className="text-3xl font-black text-red-500 leading-tight">
-                                        {heard || (isListening ? "..." : "準備練習")}
+                                <div className="bg-slate-50 p-5 rounded-[25px] border-2 border-dashed border-slate-200">
+                                    <p className="text-xs font-bold text-slate-400 mb-2 tracking-widest uppercase">系統聽到：</p>
+                                    <p className="text-3xl font-black text-red-500 min-h-[40px]">
+                                        {heard || (isListening ? "請讀出嚟..." : "...") }
                                     </p>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div className="mt-6 flex gap-4">
-                        <button onClick={() => speak(level.target)} className="bg-white border-2 border-blue-100 text-blue-500 px-6 py-3 rounded-2xl font-bold shadow-sm active:bg-blue-50">🔈 聽示範</button>
-                    </div>
+                    <button 
+                        onClick={() => speak(level.target)}
+                        className="mt-8 flex items-center gap-3 text-blue-500 font-bold bg-white px-10 py-4 rounded-[20px] shadow-sm border border-blue-100 active:bg-blue-50 transition-colors"
+                    >
+                        <span className="text-xl">🔈</span> 聽示範讀音
+                    </button>
+                    
+                    <p className="mt-8 text-slate-400 text-xs text-center px-6">
+                        💡 貼士：如果讀完「鼠」冇反應，請嘗試讀長少少，例如「鼠～～」
+                    </p>
                 </div>
             );
         }
