@@ -10,15 +10,14 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { font-family: system-ui, sans-serif; background-color: #f0f9ff; touch-action: manipulation; }
-        .mic-on { background-color: #ef4444 !important; animation: breathe 1.5s infinite; }
-        @keyframes breathe { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        .is-recording { background-color: #ef4444 !important; box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef } = React;
+        const { useState } = React;
 
         const LEVELS = [
             { t: "鼠", jp: "syu2", img: "🐭", alt: ["老鼠", "數", "處", "書", "薯"] },
@@ -30,10 +29,9 @@
 
         function App() {
             const [cur, setCur] = useState(0);
-            const [isListening, setIsListening] = useState(false);
+            const [status, setStatus] = useState("ready"); // ready, listening, ok
             const [heard, setHeard] = useState("");
-            const [error, setError] = useState("");
-            const recognitionRef = useRef(null);
+            const [msg, setMsg] = useState("");
 
             const speak = (txt) => {
                 window.speechSynthesis.cancel();
@@ -43,65 +41,58 @@
                 window.speechSynthesis.speak(u);
             };
 
-            const startListening = () => {
-                // 1. 清除舊錯誤與狀態
-                setError("");
-                setHeard("");
-
+            const runSpeech = () => {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                
                 if (!SpeechRecognition) {
-                    setError("你的瀏覽器不支持語音功能");
+                    setMsg("❌ 瀏覽器不支持語音功能");
                     return;
                 }
 
-                // 2. 創建實例 (每次點擊都重新創建最保險)
-                const recognition = new SpeechRecognition();
-                recognition.lang = 'zh-HK';
-                recognition.interimResults = true;
-                recognition.continuous = false;
+                setMsg("嘗試啟動麥克風...");
+                setHeard("");
+                
+                const rec = new SpeechRecognition();
+                rec.lang = 'zh-HK';
+                rec.interimResults = true;
 
-                recognition.onstart = () => {
-                    setIsListening(true);
+                rec.onstart = () => {
+                    setStatus("listening");
+                    setMsg("已開啟！請讀出嚟...");
                 };
 
-                recognition.onresult = (event) => {
-                    const transcript = Array.from(event.results)
-                        .map(result => result[0].transcript)
-                        .join('');
-                    setHeard(transcript);
+                rec.onresult = (e) => {
+                    const text = e.results[0][0].transcript;
+                    setHeard(text);
 
-                    const target = LEVELS[cur];
-                    if (transcript.includes(target.t) || target.alt.some(a => transcript.includes(a))) {
-                        recognition.stop();
-                        handleSuccess();
+                    const item = LEVELS[cur];
+                    if (text.includes(item.t) || item.alt.some(a => text.includes(a))) {
+                        setStatus("ok");
+                        rec.stop();
+                        speak("好叻呀");
+                        setTimeout(() => {
+                            setCur(c => (c + 1) % LEVELS.length);
+                            setHeard("");
+                            setStatus("ready");
+                            setMsg("");
+                        }, 1500);
                     }
                 };
 
-                recognition.onerror = (event) => {
-                    setError("出錯: " + event.error);
-                    setIsListening(false);
+                rec.onerror = (e) => {
+                    setStatus("ready");
+                    setMsg("發生錯誤: " + e.error);
                 };
 
-                recognition.onend = () => {
-                    setIsListening(false);
+                rec.onend = () => {
+                    if (status !== "ok") setStatus("ready");
                 };
 
-                recognitionRef.current = recognition;
                 try {
-                    recognition.start();
+                    rec.start();
                 } catch (e) {
-                    setError("啟動失敗，請重試");
-                    setIsListening(false);
+                    setMsg("啟動失敗，請重新整理網頁");
                 }
-            };
-
-            const handleSuccess = () => {
-                speak("好叻呀");
-                setTimeout(() => {
-                    setCur(c => (c + 1) % LEVELS.length);
-                    setHeard("");
-                    setError("");
-                }, 1500);
             };
 
             const item = LEVELS[cur];
@@ -109,33 +100,28 @@
             return (
                 <div className="min-h-screen flex flex-col items-center p-6 text-slate-800">
                     <div className="w-full max-w-md bg-white p-4 rounded-2xl shadow-sm mb-6 flex justify-between font-bold text-blue-500">
-                        <span>關卡 {cur + 1}</span>
-                        <span>⭐ {cur}</span>
+                        <span>關卡 {cur + 1} / 5</span>
                     </div>
 
-                    <div className="bg-white rounded-[40px] shadow-lg p-10 w-full max-w-md flex flex-col items-center">
+                    <div className="bg-white rounded-[40px] shadow-xl p-10 w-full max-w-md flex flex-col items-center">
                         <div className="text-[10rem] mb-4">{item.img}</div>
                         <div className="text-8xl font-black mb-2">{item.t}</div>
                         <p className="text-slate-400 text-2xl mb-10">{item.jp}</p>
 
                         <button 
-                            onClick={startListening}
-                            disabled={isListening}
-                            className={`w-full py-8 rounded-3xl text-3xl font-black text-white transition-all ${isListening ? 'mic-on' : 'bg-blue-600 active:bg-blue-700 shadow-xl'}`}
+                            onClick={runSpeech}
+                            className={`w-full py-8 rounded-3xl text-3xl font-black text-white transition-all active:scale-95 ${status === 'listening' ? 'is-recording' : 'bg-blue-600'}`}
                         >
-                            {isListening ? "正在聽你講..." : "按此開始練習"}
+                            {status === 'listening' ? "🎤 聽緊你講..." : "🔴 撳我開始"}
                         </button>
 
-                        <div className="mt-8 text-center min-h-[80px]">
-                            {error ? (
-                                <p className="text-red-500 font-bold">{error}</p>
-                            ) : (
-                                <p className="text-3xl font-black text-blue-500">{heard || "---"}</p>
-                            )}
+                        <div className="mt-8 text-center min-h-[100px]">
+                            {msg && <p className="text-red-500 font-bold mb-2">{msg}</p>}
+                            <p className="text-4xl font-black text-blue-500">{heard || "---"}</p>
                         </div>
                     </div>
 
-                    <button onClick={() => speak(item.t)} className="mt-10 text-blue-500 font-bold underline text-xl">
+                    <button onClick={() => speak(item.t)} className="mt-10 bg-white px-8 py-3 rounded-xl border border-blue-200 text-blue-500 font-bold">
                         🔈 聽示範讀音
                     </button>
                 </div>
