@@ -12,8 +12,6 @@
         body { font-family: system-ui, sans-serif; background-color: #f0f9ff; touch-action: manipulation; }
         .recording { background-color: #ef4444 !important; animation: breathe 1.2s infinite; }
         @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
-        .success-pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        @keyframes pop { 0% { transform: scale(0.9); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
@@ -22,13 +20,12 @@
     <script type="text/babel">
         const { useState, useRef } = React;
 
-        // 擴展模糊比對詞庫，捕捉所有可能的 S 音誤聽
         const LEVELS = [
-            { t: "鼠", jp: "syu2", img: "🐭", match: ["鼠", "老鼠", "書", "數", "處", "薯", "暑", "五", "許"] },
-            { t: "沙", jp: "saa1", img: "🏖️", match: ["沙", "山", "三", "衫", "沙灘", "紗", "新", "省", "撒", "殺", "些"] },
-            { t: "水", jp: "seoi2", img: "💧", match: ["水", "睡", "水果", "瑞", "雖", "稅", "碎", "緒"] },
-            { t: "石", jp: "sek6", img: "🪨", match: ["石", "石頭", "席", "射", "尺", "碩", "勺", "汐"] },
-            { t: "手", jp: "sau2", img: "✋", match: ["手", "手錶", "首", "抖", "口", "收", "秀", "瘦"] }
+            { t: "鼠", jp: "syu2", img: "🐭", m: /鼠|書|數|處|薯|暑|五|許|預/ },
+            { t: "沙", jp: "saa1", img: "🏖️", m: /沙|山|三|衫|新|省|撒|殺|些|塞|下|嚇|哈|加|花|吧/ }, // 增加更多可能的誤聽模式
+            { t: "水", jp: "seoi2", img: "💧", m: /水|睡|瑞|雖|稅|碎|緒/ },
+            { t: "石", jp: "sek6", img: "🪨", m: /石|席|射|尺|碩|勺|夕/ },
+            { t: "手", jp: "sau2", img: "✋", m: /手|首|抖|口|收|秀|瘦/ }
         ];
 
         function App() {
@@ -48,49 +45,37 @@
 
             const start = () => {
                 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                if (!SR) return alert("不支援此瀏覽器");
+                if (!SR) return;
 
                 const rec = new SR();
                 rec.lang = 'zh-HK';
                 rec.interimResults = true;
                 rec.continuous = false;
 
-                rec.onstart = () => {
-                    setIsListening(true);
-                    setIsOk(false);
-                };
+                rec.onstart = () => { setIsListening(true); setIsOk(false); };
 
                 rec.onresult = (e) => {
                     const text = e.results[0][0].transcript;
                     setHeard(text);
-
-                    const target = LEVELS[cur];
-                    // 只要「聽到的文字」包含目標字，或是匹配列表中的任何一個字
-                    const isMatched = target.match.some(m => text.includes(m));
-
-                    if (isMatched) {
-                        setIsOk(true);
-                        setIsListening(false);
-                        recognitionRef.current = null; // 停止自動重連
-                        rec.stop();
-                        handleCorrect();
+                    if (LEVELS[cur].m.test(text)) {
+                        stopAndNext();
                     }
                 };
 
                 rec.onend = () => {
-                    // 自動重連：直到讀對為止，按鈕保持紅色
                     if (!isOk && recognitionRef.current) {
                         try { rec.start(); } catch(e) {}
-                    } else {
-                        setIsListening(false);
-                    }
+                    } else { setIsListening(false); }
                 };
 
                 recognitionRef.current = rec;
                 rec.start();
             };
 
-            const handleCorrect = () => {
+            const stopAndNext = () => {
+                setIsOk(true);
+                setIsListening(false);
+                recognitionRef.current = null;
                 speak("好叻呀");
                 setTimeout(() => {
                     setCur(c => (c + 1) % LEVELS.length);
@@ -100,56 +85,44 @@
             };
 
             const toggle = () => {
-                if (isListening) {
-                    recognitionRef.current = null;
-                    setIsListening(false);
-                } else {
-                    setHeard("");
-                    start();
-                }
+                if (isListening) { recognitionRef.current = null; setIsListening(false); }
+                else { setHeard(""); start(); }
             };
 
             const item = LEVELS[cur];
 
             return (
                 <div className="min-h-screen flex flex-col items-center p-6">
-                    <div className="w-full max-w-md bg-white p-4 rounded-2xl shadow-sm mb-6 flex justify-between font-bold text-blue-500 border border-blue-100">
+                    <div className="w-full max-w-md bg-white p-4 rounded-2xl shadow-sm mb-6 flex justify-between font-bold text-blue-500">
                         <span>進度：{cur + 1} / 5</span>
-                        <span className="text-yellow-500 text-xl">⭐ {cur}</span>
+                        <button onClick={stopAndNext} className="text-slate-300 text-xs">手動跳過</button>
                     </div>
 
-                    <div className={`bg-white rounded-[50px] shadow-xl p-10 w-full max-w-md flex flex-col items-center transition-all duration-300 ${isOk ? 'success-pop border-4 border-green-400' : 'border-4 border-transparent'}`}>
-                        <div className="text-[11rem] mb-2 leading-none drop-shadow-sm">{item.img}</div>
-                        <div className="text-8xl font-black mb-2 text-slate-800 tracking-tighter">{item.t}</div>
-                        <p className="text-slate-400 text-3xl mb-10 font-mono tracking-[0.2em]">{item.jp}</p>
+                    <div className={`bg-white rounded-[50px] shadow-xl p-10 w-full max-w-md flex flex-col items-center transition-all ${isOk ? 'border-4 border-green-400' : ''}`}>
+                        <div className="text-[10rem] mb-2 leading-none">{item.img}</div>
+                        <div className="text-8xl font-black mb-2 text-slate-800">{item.t}</div>
+                        <p className="text-slate-400 text-2xl mb-10 font-mono tracking-widest">{item.jp}</p>
 
                         <button 
                             onClick={toggle}
-                            className={`w-full py-9 rounded-[35px] text-3xl font-black text-white transition-all shadow-lg active:scale-95 ${isListening ? 'recording' : 'bg-blue-600'}`}
+                            className={`w-full py-9 rounded-[35px] text-3xl font-black text-white shadow-lg ${isListening ? 'recording' : 'bg-blue-600'}`}
                         >
-                            {isListening ? "🎤 聽緊你... (再撳停止)" : "🔴 撳我開始練習"}
+                            {isListening ? "聽緊你... (再撳停止)" : "🔴 撳我練習"}
                         </button>
 
                         <div className="mt-8 text-center min-h-[110px] w-full bg-slate-50 rounded-[30px] p-6 border-2 border-dashed border-slate-200">
-                            <p className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">系統聽到：</p>
-                            <p className="text-4xl font-black text-red-500 break-all">{heard || (isListening ? "請發聲..." : "---")}</p>
+                            <p className="text-xs font-bold text-slate-400 mb-2 uppercase">系統聽到：</p>
+                            <p className="text-4xl font-black text-red-500">{heard || (isListening ? "請發聲..." : "---")}</p>
                         </div>
                     </div>
 
-                    <button 
-                        onClick={() => speak(item.t)} 
-                        className="mt-10 bg-white border-2 border-blue-100 text-blue-500 px-12 py-5 rounded-3xl font-bold shadow-sm active:bg-blue-50 transition-colors flex items-center gap-3"
-                    >
-                        <span className="text-2xl">🔈</span> 聽示範讀音
+                    <button onClick={() => speak(item.t)} className="mt-8 flex items-center gap-2 text-blue-500 font-bold bg-white px-10 py-4 rounded-2xl shadow-sm border border-blue-50">
+                        🔈 聽示範
                     </button>
                     
-                    <div className="mt-8 px-6 py-3 bg-yellow-50 rounded-2xl border border-yellow-100 max-w-md">
-                        <p className="text-yellow-700 text-sm font-medium text-center leading-relaxed">
-                            💡 讀「沙」嘅小秘訣：<br/>
-                            試下讀長啲、大聲啲成 <b>「沙～～～」</b><br/>
-                            或者讀 <b>「沙灘」</b> 都會成功！
-                        </p>
-                    </div>
+                    <p className="mt-6 text-yellow-600 text-sm text-center px-4 bg-yellow-50 py-2 rounded-xl">
+                        💡 讀「沙」時請大聲一點，或者嘗試讀 <b>「沙灘」</b>
+                    </p>
                 </div>
             );
         }
