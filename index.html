@@ -9,39 +9,31 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        body { font-family: system-ui, sans-serif; background-color: #f0f9ff; margin: 0; }
+        body { font-family: system-ui, sans-serif; background-color: #f0f9ff; margin: 0; touch-action: manipulation; }
         .mic-active { animation: pulse 1s infinite; background-color: #ef4444 !important; }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef } = React;
+        const { useState } = React;
 
         const LEVELS = [
-            { t: "鼠", jp: "syu2", img: "🐭", alt: ["鼠", "老鼠", "書", "數", "薯"] },
-            { t: "沙", jp: "saa1", img: "🏖️", alt: ["沙", "沙灘", "山", "三", "衫"] },
-            { t: "水", jp: "seoi2", img: "💧", alt: ["水", "睡", "水果"] },
-            { t: "石", jp: "sek6", img: "🪨", alt: ["石", "石頭", "射", "尺"] },
-            { t: "手", jp: "sau2", img: "✋", alt: ["手", "手錶", "首"] }
+            { t: "鼠", jp: "syu2", img: "🐭", alt: ["鼠", "老鼠", "書", "數", "薯", "暑", "五"] },
+            { t: "沙", jp: "saa1", img: "🏖️", alt: ["沙", "沙灘", "山", "三", "衫", "紗", "下"] },
+            { t: "水", jp: "seoi2", img: "💧", alt: ["水", "睡", "水果", "瑞", "雖"] },
+            { t: "石", jp: "sek6", img: "🪨", alt: ["石", "石頭", "射", "席", "尺", "碩"] },
+            { t: "手", jp: "sau2", img: "✋", alt: ["手", "手錶", "首", "抖", "口"] }
         ];
 
         function App() {
-            // 明確初始化為 'home'
             const [view, setView] = useState('home'); 
             const [cur, setCur] = useState(0);
             const [isListening, setIsListening] = useState(false);
             const [heard, setHeard] = useState("");
             const [isOk, setIsOk] = useState(false);
-            
-            const recognitionRef = useRef(null);
-            const userActive = useRef(false);
 
             const speak = (txt) => {
                 window.speechSynthesis.cancel();
@@ -50,69 +42,57 @@
                 window.speechSynthesis.speak(u);
             };
 
-            const startRecog = () => {
+            const startListening = () => {
                 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                if (!SR) return;
+                if (!SR) return alert("瀏覽器不支援語音功能");
+
                 const rec = new SR();
                 rec.lang = 'zh-HK';
                 rec.interimResults = true;
-                rec.onstart = () => setIsListening(true);
+                rec.continuous = false;
+
+                rec.onstart = () => {
+                    setIsListening(true);
+                    setHeard("");
+                    setIsOk(false);
+                };
+
                 rec.onresult = (e) => {
-                    let text = e.results[0][0].transcript;
+                    const text = e.results[0][0].transcript;
                     setHeard(text);
                     const target = LEVELS[cur];
                     if (text.includes(target.t) || target.alt.some(a => text.includes(a))) {
-                        userActive.current = false;
                         rec.stop();
-                        handleSuccess();
+                        setIsOk(true);
+                        speak("好叻呀");
+                        setTimeout(() => {
+                            if (cur < LEVELS.length - 1) {
+                                setCur(c => c + 1);
+                                setHeard("");
+                                setIsOk(false);
+                                setIsListening(false);
+                            } else {
+                                setView('end');
+                            }
+                        }, 1500);
                     }
                 };
-                rec.onend = () => {
-                    if (userActive.current) {
-                        try { rec.start(); } catch(err) {}
-                    } else { setIsListening(false); }
-                };
-                recognitionRef.current = rec;
-                try { rec.start(); } catch(err) {}
-            };
 
-            const handleSuccess = () => {
-                setIsOk(true);
-                speak("好叻呀");
-                setTimeout(() => {
-                    if (cur < LEVELS.length - 1) {
-                        setCur(c => c + 1);
-                        setHeard("");
-                        setIsOk(false);
-                    } else {
-                        setView('end');
-                    }
-                }, 1500);
-            };
+                rec.onend = () => setIsListening(false);
+                rec.onerror = () => setIsListening(false);
 
-            const toggleMic = () => {
-                if (userActive.current) {
-                    userActive.current = false;
-                    recognitionRef.current?.stop();
-                } else {
-                    setHeard("");
-                    setIsOk(false);
-                    userActive.current = true;
-                    startRecog();
-                }
+                try { rec.start(); } catch(e) { console.error(e); }
             };
-
-            // --- 畫面渲染邏輯 ---
 
             if (view === 'home') {
                 return (
-                    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white">
+                    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white text-center">
                         <div className="text-9xl mb-8">🗣️</div>
-                        <h1 className="text-5xl font-black text-blue-600 mb-6 text-center">廣東話 S 音練習</h1>
-                        <p className="text-slate-500 text-xl mb-12 text-center">小朋友，準備好一齊挑戰未？</p>
+                        <h1 className="text-5xl font-black text-blue-600 mb-6">廣東話 S 音練習</h1>
+                        <p className="text-slate-500 text-xl mb-12">小朋友，準備好挑戰未？</p>
                         <button 
                             onClick={() => { setView('play'); speak("準備好未？開始！"); }}
-                            className="bg-blue-600 text-white text-3xl font-black px-20 py-8 rounded-[40px] shadow-2xl active:scale-95 transition-all"
+                            className="bg-blue-600 text-white text-3xl font-black px-20 py-8 rounded-[40px] shadow-2xl active:scale-95"
                         >
                             開始練習 🚀
                         </button>
@@ -122,53 +102,46 @@
 
             if (view === 'end') {
                 return (
-                    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-green-50">
+                    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-green-50 text-center">
                         <div className="text-9xl mb-8">🏆</div>
                         <h1 className="text-5xl font-black text-green-600 mb-4">挑戰成功！</h1>
-                        <p className="text-slate-600 text-xl mb-12 text-center">你今日講得好清楚呀！</p>
-                        <button 
-                            onClick={() => window.location.reload()}
-                            className="bg-orange-500 text-white text-2xl font-black px-12 py-6 rounded-[30px] shadow-xl"
-                        >
-                            再玩一次 🔄
-                        </button>
+                        <button onClick={() => window.location.reload()} className="bg-orange-500 text-white text-2xl font-black px-12 py-6 rounded-[30px] shadow-xl">再玩一次 🔄</button>
                     </div>
                 );
             }
 
-            // 遊戲中介面
             const item = LEVELS[cur];
             return (
-                <div className={`min-h-screen flex flex-col items-center p-6 transition-colors ${isOk ? 'bg-green-50' : 'bg-sky-50'}`}>
+                <div className={`min-h-screen flex flex-col items-center p-6 transition-colors ${isOk ? 'bg-green-100' : 'bg-sky-50'}`}>
                     <div className="w-full max-w-md mb-8 mt-4">
                         <div className="w-full h-4 bg-white rounded-full border border-blue-100 overflow-hidden shadow-inner">
                             <div className="h-full bg-blue-500 transition-all duration-500" style={{width: `${((cur + 1)/5)*100}%`}}></div>
                         </div>
-                        <p className="text-center mt-2 font-bold text-blue-500">進度：{cur + 1} / 5</p>
                     </div>
 
                     <div className="bg-white rounded-[50px] shadow-xl p-10 w-full max-w-md flex flex-col items-center relative">
                         <div className="text-[10rem] mb-2 leading-none">{item.img}</div>
                         <div className="text-8xl font-black text-slate-800 mb-2">{item.t}</div>
-                        <div className="text-slate-400 text-2xl font-mono mb-10">{item.jp}</div>
+                        <p className="text-slate-400 text-2xl mb-10 font-mono tracking-widest">{item.jp}</p>
 
                         <button 
-                            onClick={toggleMic}
-                            className={`w-full py-9 rounded-[35px] text-3xl font-black text-white shadow-lg ${isListening ? 'mic-active' : 'bg-blue-600'}`}
+                            onClick={startListening}
+                            disabled={isListening || isOk}
+                            className={`w-full py-9 rounded-[35px] text-3xl font-black text-white shadow-lg transition-all ${isListening ? 'mic-active' : 'bg-blue-600 active:scale-95'}`}
                         >
                             {isListening ? "聽緊你講..." : "按此練習讀音"}
                         </button>
 
-                        <div className="mt-8 text-center min-h-[100px] w-full bg-slate-50 rounded-3xl p-6 flex flex-col justify-center border-2 border-dashed border-slate-200">
-                            <p className="text-4xl font-black text-red-500 leading-tight">
-                                {isOk ? "好叻呀！✅" : (heard || (isListening ? "請發聲" : "---"))}
+                        <div className="mt-8 text-center min-h-[100px] w-full bg-slate-50 rounded-3xl p-6 border-2 border-dashed border-slate-200 flex flex-col justify-center">
+                            <p className="text-4xl font-black text-blue-600">
+                                {isOk ? "好叻呀！✅" : (heard || "---")}
                             </p>
                         </div>
                     </div>
                     
                     <div className="mt-8 flex gap-4">
-                        <button onClick={() => speak(item.t)} className="bg-white border-2 border-blue-200 text-blue-500 px-8 py-4 rounded-2xl font-bold">🔈 聽示範</button>
-                        <button onClick={() => setView('home')} className="bg-slate-200 text-slate-600 px-8 py-4 rounded-2xl font-bold">🏠 返回首頁</button>
+                        <button onClick={() => speak(item.t)} className="bg-white border-2 border-blue-200 text-blue-500 px-8 py-4 rounded-2xl font-bold shadow-sm">🔈 聽示範</button>
+                        <button onClick={() => setView('home')} className="bg-slate-200 text-slate-600 px-8 py-4 rounded-2xl font-bold shadow-sm">🏠 首頁</button>
                     </div>
                 </div>
             );
